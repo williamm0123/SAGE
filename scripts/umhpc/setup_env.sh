@@ -36,11 +36,10 @@ fi
 # shellcheck disable=SC1091
 source "$CONDA_ROOT/etc/profile.d/conda.sh"
 if ! conda env list | awk '{print $1}' | grep -qx "$SAGE_ENV"; then
-  # mpi4py from conda-forge ships its own MPICH; guided_diffusion.dist_util imports it.
-  conda create -y -n "$SAGE_ENV" -c conda-forge python=3.10 mpi4py=3.1.6 git
+  conda create -y -n "$SAGE_ENV" -c conda-forge python=3.10 git
 fi
 conda activate "$SAGE_ENV"
-python -m pip install --upgrade pip wheel setuptools
+python -m pip install --upgrade pip wheel
 
 echo "== [2/5] PyTorch + deps =="
 python -m pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
@@ -71,9 +70,11 @@ if [ "${FETCH_IMAGENET_ADM:-0}" = 1 ]; then
 fi
 
 TORCH_HOME=$WEIGHTS_ROOT/torch CLIP_CACHE=$WEIGHTS_ROOT/clip \
-PYTHONPATH=$THIRD_PARTY/UniversalFakeDetect python - <<'PY'
-import os, torch, lpips
-from models.clip import clip           # UniversalFakeDetect's vendored CLIP
+THIRD_PARTY=$THIRD_PARTY python - <<'PY'
+import importlib.util, os, sys, lpips
+init = os.path.join(os.environ["THIRD_PARTY"], "UniversalFakeDetect/models/clip/__init__.py")
+spec = importlib.util.spec_from_file_location("ufd_clip", init, submodule_search_locations=[os.path.dirname(init)])
+clip = importlib.util.module_from_spec(spec); sys.modules["ufd_clip"] = clip; spec.loader.exec_module(clip)
 clip.load("ViT-L/14", device="cpu", download_root=os.environ["CLIP_CACHE"])
 lpips.LPIPS(net="alex", version="0.1")  # pulls torchvision AlexNet into $TORCH_HOME
 print("CLIP ViT-L/14 + LPIPS(alex) cached")
@@ -102,4 +103,4 @@ done > "$lock/third_party_commits.txt"
 find "$WEIGHTS_ROOT" -type f \( -name '*.pt' -o -name '*.pth' \) -print0 \
   | xargs -0 -r sha256sum > "$lock/weights_sha256.txt"
 echo "Lock written to $lock"
-echo "Next: sbatch scripts/umhpc/check_env.sbatch"
+echo "Next: (cd $PROJECT_ROOT && python -m pytest -q tests) && sbatch scripts/umhpc/check_env.sbatch"

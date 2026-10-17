@@ -24,46 +24,15 @@ SAP: 平均功率谱 P̄_r, P̄_f            a(u,v)=mean_c|α*·ΔP_c|      D(x_
                                         返回 LPIPS≤δ 中 L2 最小者，或失败+诊断
 ```
 
-## 2. 目录结构（计划）
+## 2. 目录结构
 
-```
-SAGE/
-├── configs/sage_v1.0.json          # 冻结的协议参数（论文 4.4）
-├── envs/requirements.txt           # pip 依赖（torch 单独装）
-├── scripts/
-│   ├── umhpc/
-│   │   ├── setup_env.sh            # 登录节点：建 conda 环境、克隆第三方仓库、预下载权重
-│   │   ├── env.sh                  # 每个作业 source：环境变量、缓存路径
-│   │   └── check_env.sbatch        # 在 A100 节点上做 GPU/依赖/检测器自检
-│   └── data/
-│       ├── build_manifest.py       # 扫描→哈希→去重→划分(seed 20261008)→预处理到 256 画布
-│       └── verify_manifest.py      # 校验 manifest 与磁盘文件一致
-├── sage/
-│   ├── spectral.py                 # 酉 FFT、径向频带 Ω_b、DC 处理、共轭对称、T(x;α)   (Eq.2,4–6)
-│   ├── sap.py                      # 由 dev 集计算 P̄_r, P̄_f, ΔP，保存 prior.npz           (Eq.3)
-│   ├── asa.py                      # 带内归一化 KL + λ·LPIPS，网格坐标下降                 (Eq.7–8)
-│   ├── weights.py                  # a(u,v)、W(u,v)，以及 uniform / low-freq 对照权重     (Eq.10–11)
-│   ├── sbqr.py                     # 谱偏置边界细化 + 步长自适应 + 归档                    (Eq.12–14)
-│   ├── init.py                     # ASA 验证、参考池验证、二分括定                        (Eq.9)
-│   ├── query.py                    # QueryCounter / 标签缓存 / 预算检查 / 检查点记录（所有方法共用）
-│   ├── perceptual.py               # LPIPS(alex, v0.1, 输入 2x−1)、PSNR、RMSE
-│   ├── detectors/
-│   │   ├── base.py                 # 统一接口: predict(x[0,1] 256×256) -> {Real, Fake}
-│   │   ├── ufd.py                  # UniversalFakeDetect: CLIP ViT-L/14 + fc_weights.pth
-│   │   └── dire.py                 # DIRE: ADM DDIM 反演+重建(20步) → |x−recon| → ResNet50
-│   ├── baselines/
-│   │   ├── boundary.py             # BA（foolbox 3.3.4 默认参数，经共享查询包装器）
-│   │   ├── hsja.py                 # HSJA（同上）
-│   │   └── qeba.py                 # QEBA-S 空间变体（移植官方实现）
-│   └── attack.py                   # SAGE 完整流程（论文 3.7 节 6 步）
-├── experiments/
-│   ├── screen_clean.py             # 干净样本筛选 I_D、FPR（单独计费，不计入预算）
-│   ├── run_primary.py              # 实验块 1：4 方法 × 2 检测器 × 400 图 × 3 seeds
-│   ├── run_controls.py             # 实验块 2：100 图子集，共享起点 + uniform/lowfreq/learned
-│   ├── run_transfer.py             # 实验块 3：SD-v1-only prior → SD-v2
-│   └── analyze.py                  # ASR@Q、惩罚查询数(5001)、bootstrap 10k、出图
-└── slurm/                          # 按 (detector, method, seed, shard) 切分的数组作业
-```
+已实现，见 [README.md](../README.md) 的 Layout 一节。与最初计划的差异：
+
+- 基线 BA / HSJA / QEBA-S 在 `sage/baselines.py` 中自行实现（不依赖 foolbox），以便所有方法
+  共用同一个 `QueryOracle`（预算、缓存、检查点完全一致）；默认参数照搬参考实现并写在文件头。
+- 所有攻击写成 Python generator，由 `sage/query.py:run_tasks` 把多个攻击的待查询图像拼成一个
+  batch 送进检测器（单卡 A100 上同时跑 8–32 个攻击），不改变任何单次攻击的查询计数。
+- 第三方代码（DIRE、UFD 的 CLIP）按文件路径加载，避免两个仓库都有 `networks` 包导致冲突。
 
 ## 3. 关键实现要点（容易出错的地方）
 

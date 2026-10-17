@@ -33,9 +33,8 @@ err = (torch.fft.ifft2(X, norm="ortho").real - img).abs().max().item()
 print(f"max |ifft2(fft2(x)) - x| = {err:.2e}")
 
 section("Python packages")
-import lpips, foolbox, imagehash, mpi4py, numpy, guided_diffusion  # noqa: E401,F401
-print("numpy", numpy.__version__, "| lpips", lpips.__version__ if hasattr(lpips, "__version__") else "ok",
-      "| foolbox", foolbox.__version__, "| mpi4py", mpi4py.__version__)
+import imagehash, lpips, numpy, guided_diffusion  # noqa: E401,F401
+print("numpy", numpy.__version__, "| lpips ok | guided_diffusion", guided_diffusion.__file__)
 
 section("Weights")
 required = {

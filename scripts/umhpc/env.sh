@@ -18,7 +18,8 @@ export HF_HOME=$WEIGHTS_ROOT/hf
 export HF_HUB_OFFLINE=1
 export PIP_CACHE_DIR=${PIP_CACHE_DIR:-$PROJECT_ROOT/.cache/pip}
 
-export PYTHONPATH=$PROJECT_ROOT:$THIRD_PARTY/UniversalFakeDetect:$THIRD_PARTY/DIRE:${PYTHONPATH:-}
+# Third-party code is loaded by file path inside sage/detectors.py (DIRE and UFD both define `networks`).
+export PYTHONPATH=$PROJECT_ROOT:${PYTHONPATH:-}
 
 # Determinism for the primary evaluation (paper Sec. 4.2)
 export CUBLAS_WORKSPACE_CONFIG=:4096:8
