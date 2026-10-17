@@ -1,0 +1,102 @@
+{
+  "protocol_version": "SAGE-v1.0",
+  "canvas": {
+    "size": 256,
+    "resize": "bicubic",
+    "non_square": "center_crop_then_resize",
+    "dtype": "float32",
+    "range": [0.0, 1.0],
+    "lossy_roundtrip": false
+  },
+  "perceptual": {
+    "metric": "lpips",
+    "net": "alex",
+    "version": "0.1",
+    "input_transform": "2x-1",
+    "delta_p": 0.05
+  },
+  "spectral": {
+    "fft_norm": "ortho",
+    "num_bands": 8,
+    "rho_max": 0.7071067811865476,
+    "exclude_dc": true,
+    "eps": 1e-12
+  },
+  "asa": {
+    "alpha_grid": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+    "alpha_max": 1.0,
+    "init": "zeros",
+    "sweep_order": "low_to_high",
+    "max_sweeps": 3,
+    "rel_tol": 1e-4,
+    "lambda_perc": 1.0,
+    "tie_break": "smaller",
+    "energy_penalty": false
+  },
+  "sbqr": {
+    "zeta": 0.1,
+    "gamma0": 0.01,
+    "lambda0": 0.01,
+    "step_bounds": [1e-5, 0.1],
+    "adapt_window": 50,
+    "p_low": 0.1,
+    "p_high": 0.3,
+    "a_step": 1.5,
+    "count_local_rejections": true,
+    "min_rel_l2_improvement": 1e-8,
+    "max_local_proposals": 100000,
+    "max_degenerate_resample": 10,
+    "stagnation_stop": false
+  },
+  "lowfreq_control": {
+    "rho_max": 0.25
+  },
+  "init": {
+    "max_references": 50,
+    "bisection_tol": 1e-5,
+    "bisection_max_queries": 20
+  },
+  "budget": {
+    "max_queries": 5000,
+    "checkpoints": [500, 1000, 2000, 5000],
+    "stopping_mode": "first_success"
+  },
+  "seeds": {
+    "attack": [0, 1, 2],
+    "split": 20261008,
+    "ablation_selection": 20261009,
+    "bootstrap": 20261010
+  },
+  "bootstrap": {
+    "replicates": 10000,
+    "ci": 0.95,
+    "stratify": "generator"
+  },
+  "data": {
+    "partition": {
+      "development": {"real": 500, "sdv1": 250, "sdv2": 250},
+      "validation": {"real": 100, "sdv1": 50, "sdv2": 50},
+      "test": {"real": 400, "sdv1": 200, "sdv2": 200}
+    },
+    "reference_pool": "development/real",
+    "ablation_subset": {"sdv1": 50, "sdv2": 50},
+    "pilot_subset": {"sdv1": 20, "sdv2": 20},
+    "transfer": {"source": "sdv1", "target": "sdv2"}
+  },
+  "detectors": {
+    "ufd": {
+      "backbone": "CLIP:ViT-L/14",
+      "head": "UniversalFakeDetect/pretrained_weights/fc_weights.pth",
+      "input": "center_crop_224_clip_norm",
+      "threshold": 0.5
+    },
+    "dire": {
+      "classifier": "DIRE lsun_adm.pth (ResNet-50)",
+      "recon_model": "guided-diffusion lsun_bedroom.pt",
+      "timestep_respacing": "ddim20",
+      "use_fp16": true,
+      "input": "center_crop_224_imagenet_norm",
+      "threshold": 0.5
+    }
+  }
+}

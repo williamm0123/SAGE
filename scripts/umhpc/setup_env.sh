@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# One-time environment setup for SAGE on UMHPC (DICC, gpu-a100 partition, A100 80GB, sm_80).
+#
+# Run on the LOGIN node (needs internet; compute nodes may not have it):
+#   export PROJECT_ROOT=$HOME/SAGE          # or a larger filesystem
+#   bash scripts/umhpc/setup_env.sh
+#
+# What it does:
+#   1. installs Miniforge (if no conda found) and creates the `sage` env (Python 3.10)
+#   2. installs PyTorch 2.4.1 + CUDA 12.1 wheels (bundle their own CUDA runtime; only need driver >= 530)
+#   3. clones DIRE / UniversalFakeDetect / QEBA at recorded commits
+#   4. pre-downloads public weights (ADM lsun_bedroom, CLIP ViT-L/14, LPIPS AlexNet)
+#   5. writes an environment lock (versions, commits, sha256) to $PROJECT_ROOT/locks/
+set -euo pipefail
+
+export PROJECT_ROOT=${PROJECT_ROOT:-$HOME/SAGE}
+export CONDA_ROOT=${CONDA_ROOT:-$HOME/miniforge3}
+export SAGE_ENV=${SAGE_ENV:-sage}
+export WEIGHTS_ROOT=${WEIGHTS_ROOT:-$PROJECT_ROOT/weights}
+export THIRD_PARTY=${THIRD_PARTY:-$PROJECT_ROOT/third_party}
+export PIP_CACHE_DIR=${PIP_CACHE_DIR:-$PROJECT_ROOT/.cache/pip}
+
+# Commits inspected when this script was written (2026-10-17). Change only deliberately and re-lock.
+DIRE_COMMIT=1f89fff15f0e478307cdea9abdfe06a52fe7838a
+UFD_COMMIT=030495aea3300a8b54c0ec37ec7fe1dd7e63c619
+
+mkdir -p "$WEIGHTS_ROOT"/{torch,clip,hf,guided_diffusion,dire,ufd} "$THIRD_PARTY" "$PROJECT_ROOT/locks" "$PIP_CACHE_DIR"
+
+echo "== [1/5] conda env =="
+if [ ! -x "$CONDA_ROOT/bin/conda" ]; then
+  installer=$(mktemp -d)/Miniforge3.sh
+  curl -fsSL -o "$installer" \
+    https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+  bash "$installer" -b -p "$CONDA_ROOT"
+fi
+# shellcheck disable=SC1091
+source "$CONDA_ROOT/etc/profile.d/conda.sh"
+if ! conda env list | awk '{print $1}' | grep -qx "$SAGE_ENV"; then
+  # mpi4py from conda-forge ships its own MPICH; guided_diffusion.dist_util imports it.
+  conda create -y -n "$SAGE_ENV" -c conda-forge python=3.10 mpi4py=3.1.6 git
+fi
+conda activate "$SAGE_ENV"
+python -m pip install --upgrade pip wheel setuptools
+
+echo "== [2/5] PyTorch + deps =="
+python -m pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
+python -m pip install -r "$PROJECT_ROOT/envs/requirements.txt"
+
+echo "== [3/5] third-party code =="
+clone_at() {  # url dir commit
+  if [ ! -d "$2/.git" ]; then git clone "$1" "$2"; fi
+  if [ -n "${3:-}" ]; then git -C "$2" fetch -q origin && git -C "$2" checkout -q "$3"; fi
+}
+clone_at https://github.com/ZhendongWang6/DIRE                  "$THIRD_PARTY/DIRE"                "$DIRE_COMMIT"
+clone_at https://github.com/WisconsinAIVision/UniversalFakeDetect "$THIRD_PARTY/UniversalFakeDetect" "$UFD_COMMIT"
+clone_at https://github.com/AI-secure/QEBA                       "$THIRD_PARTY/QEBA"                ""   # reference for porting QEBA-S
+python -m pip install -e "$THIRD_PARTY/DIRE/guided-diffusion"
+cp -n "$THIRD_PARTY/UniversalFakeDetect/pretrained_weights/fc_weights.pth" "$WEIGHTS_ROOT/ufd/"
+
+echo "== [4/5] public weights =="
+fetch() {  # url dest
+  [ -s "$2" ] || curl -fL --retry 3 -o "$2" "$1"
+}
+# ADM unconditional LSUN-bedroom model used by DIRE reconstruction for lsun_bedroom images
+fetch https://openaipublic.blob.core.windows.net/diffusion/jul-2021/lsun_bedroom.pt \
+      "$WEIGHTS_ROOT/guided_diffusion/lsun_bedroom.pt"
+# ImageNet unconditional ADM (only needed if you later evaluate the imagenet subset)
+if [ "${FETCH_IMAGENET_ADM:-0}" = 1 ]; then
+  fetch https://openaipublic.blob.core.windows.net/diffusion/jul-2021/256x256_diffusion_uncond.pt \
+        "$WEIGHTS_ROOT/guided_diffusion/256x256_diffusion_uncond.pt"
+fi
+
+TORCH_HOME=$WEIGHTS_ROOT/torch CLIP_CACHE=$WEIGHTS_ROOT/clip \
+PYTHONPATH=$THIRD_PARTY/UniversalFakeDetect python - <<'PY'
+import os, torch, lpips
+from models.clip import clip           # UniversalFakeDetect's vendored CLIP
+clip.load("ViT-L/14", device="cpu", download_root=os.environ["CLIP_CACHE"])
+lpips.LPIPS(net="alex", version="0.1")  # pulls torchvision AlexNet into $TORCH_HOME
+print("CLIP ViT-L/14 + LPIPS(alex) cached")
+PY
+
+if [ ! -s "$WEIGHTS_ROOT/dire/lsun_adm.pth" ]; then
+  cat <<EOF
+
+  [MANUAL] DIRE classifier checkpoint not found.
+  Download lsun_adm.pth from the links in https://github.com/ZhendongWang6/DIRE#readme
+  (RecDrive / BaiduDrive / OneDrive, password: dire) and copy it to:
+      $WEIGHTS_ROOT/dire/lsun_adm.pth
+  e.g. from your PC:  rsync -avP lsun_adm.pth <user>@umhpc.dicc.um.edu.my:$WEIGHTS_ROOT/dire/
+
+EOF
+fi
+
+echo "== [5/5] environment lock =="
+lock=$PROJECT_ROOT/locks/env_$(date +%Y%m%d_%H%M%S)
+mkdir -p "$lock"
+python -m pip freeze > "$lock/pip_freeze.txt"
+conda env export -n "$SAGE_ENV" > "$lock/conda_env.yml"
+for d in DIRE UniversalFakeDetect QEBA; do
+  echo "$d $(git -C "$THIRD_PARTY/$d" rev-parse HEAD)"
+done > "$lock/third_party_commits.txt"
+find "$WEIGHTS_ROOT" -type f \( -name '*.pt' -o -name '*.pth' \) -print0 \
+  | xargs -0 -r sha256sum > "$lock/weights_sha256.txt"
+echo "Lock written to $lock"
+echo "Next: sbatch scripts/umhpc/check_env.sbatch"

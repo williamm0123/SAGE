@@ -1,0 +1,22 @@
+# torch / torchvision are installed separately by scripts/umhpc/setup_env.sh (CUDA 12.1 wheels)
+numpy==1.26.4
+scipy==1.13.1
+pillow==10.4.0
+opencv-python-headless==4.10.0.84
+imagehash==4.3.1
+pandas==2.2.3
+tqdm==4.66.5
+pyyaml==6.0.2
+matplotlib==3.9.2
+scikit-image==0.24.0
+scikit-learn==1.5.2
+# perceptual metric (AlexNet, v0.1)
+lpips==0.1.4
+# UniversalFakeDetect vendored CLIP
+ftfy==6.2.3
+regex==2024.9.11
+# DIRE / guided-diffusion
+blobfile==3.0.0
+einops==0.8.0
+# decision-based baselines (BA, HSJA)
+foolbox==3.3.4
