@@ -52,18 +52,21 @@ DIRE 检测器权重: lsun_adm.pth
 
 ## 3. 上传到 UMHPC
 
-```bash
-rsync -avP DiffusionForensics/images/test/lsun_bedroom <user>@umhpc.dicc.um.edu.my:~/SAGE/data/raw/DiffusionForensics/images/test/
-```
+只上传需要的约 2.2 GB（不是整个 141 GB），**上传压缩包、在 UMHPC 上解压**：
 
 ```bash
-rsync -avP lsun_adm.pth <user>@umhpc.dicc.um.edu.my:~/SAGE/weights/dire/
+bash scripts/data/upload_to_umhpc.sh
 ```
 
-如果 home 配额不够，把 `DATA_ROOT` / `WEIGHTS_ROOT` 指到更大的存储（先 `quota -s`、`df -h` 查看）。
+脚本会：本地算 sha256 → 建一个 SSH 主连接（只输一次密码）→ 用
+`rsync --partial --append-verify` 逐个上传（断线自动重试，重跑脚本从断点续传）→
+在 UMHPC 上校验 sha256 → 解压到 `~/SAGE/data/raw/DiffusionForensics/images/...` →
+把 `lsun_adm.pth` 放到 `~/SAGE/weights/dire/`。
 
-公共权重（ADM `lsun_bedroom.pt`、CLIP ViT-L/14、LPIPS AlexNet、UFD `fc_weights.pth`）由
-`scripts/umhpc/setup_env.sh` 在登录节点自动下载。
+上传的文件：`images/test/lsun_bedroom/{real,sdv1_new,sdv2}.tar.gz`、
+`images/train/lsun_bedroom/real.tar.gz`（重叠检查用，`INCLUDE_TRAIN_REAL=0` 可跳过）、
+`checkpoints/lsun_adm.pth`。注意 DIRE 的 `test/lsun_bedroom/real.tar.gz` 实际是未压缩 tar，
+`tar -xf` 会自动识别。
 
 ## 4. 生成 manifest（登录节点或 CPU 作业均可，无需 GPU）
 

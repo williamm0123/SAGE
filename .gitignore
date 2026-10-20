@@ -1,17 +1,19 @@
 # unpublished manuscript - keep out of the public repository
 *.pdf
+docs/
+experiments/
 !docs/**/*.pdf
-
+slurm/
 # data, weights, third-party checkouts, outputs
-data/
-weights/
-third_party/
-priors/
-results/
-logs/
-locks/
+/data/
+/weights/
+/third_party/
+/priors/
+/results/
+/logs/
+/locks/
 .cache/
-
+*.md
 __pycache__/
 *.pyc
 .pytest_cache/
