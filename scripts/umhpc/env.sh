@@ -5,9 +5,15 @@
 # Repository root = two levels above this file (works wherever the repo was cloned).
 export PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 export SAGE_ENV=${SAGE_ENV:-sage}
+# Prefer the installation that already holds $SAGE_ENV (e.g. ~/miniforge3 while ~/miniconda3 is the
+# active base); otherwise the active conda; otherwise ~/miniforge3 (installed by setup_env.sh).
 if [ -z "${CONDA_ROOT:-}" ]; then
-  if [ -n "${CONDA_EXE:-}" ]; then CONDA_ROOT=$(dirname "$(dirname "$CONDA_EXE")")
-  else CONDA_ROOT=$HOME/miniforge3; fi
+  _active=${CONDA_EXE:+$(dirname "$(dirname "$CONDA_EXE")")}
+  for _c in "$_active" "$HOME/miniforge3" "$HOME/miniconda3" "$HOME/anaconda3"; do
+    if [ -n "$_c" ] && [ -d "$_c/envs/$SAGE_ENV" ]; then CONDA_ROOT=$_c; break; fi
+  done
+  CONDA_ROOT=${CONDA_ROOT:-${_active:-$HOME/miniforge3}}
+  unset _c _active
 fi
 export CONDA_ROOT
 
@@ -34,4 +40,4 @@ export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-8}
 
 # shellcheck disable=SC1091
 source "$CONDA_ROOT/etc/profile.d/conda.sh"
-conda activate "$SAGE_ENV"
+conda activate "$CONDA_ROOT/envs/$SAGE_ENV"   # by path: works whichever conda is on PATH

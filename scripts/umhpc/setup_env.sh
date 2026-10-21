@@ -13,13 +13,19 @@
 set -euo pipefail
 
 export PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
+export SAGE_ENV=${SAGE_ENV:-sage}
+# Prefer the installation that already holds $SAGE_ENV (e.g. ~/miniforge3 while ~/miniconda3 is the
+# active base); otherwise the active conda; otherwise ~/miniforge3 (installed by setup_env.sh).
 if [ -z "${CONDA_ROOT:-}" ]; then
-  if [ -n "${CONDA_EXE:-}" ]; then CONDA_ROOT=$(dirname "$(dirname "$CONDA_EXE")")
-  else CONDA_ROOT=$HOME/miniforge3; fi
+  _active=${CONDA_EXE:+$(dirname "$(dirname "$CONDA_EXE")")}
+  for _c in "$_active" "$HOME/miniforge3" "$HOME/miniconda3" "$HOME/anaconda3"; do
+    if [ -n "$_c" ] && [ -d "$_c/envs/$SAGE_ENV" ]; then CONDA_ROOT=$_c; break; fi
+  done
+  CONDA_ROOT=${CONDA_ROOT:-${_active:-$HOME/miniforge3}}
+  unset _c _active
 fi
 export CONDA_ROOT
 export DIRE_ROOT=${DIRE_ROOT:-/scr/user/eric123/datasets/DIRE}
-export SAGE_ENV=${SAGE_ENV:-sage}
 export WEIGHTS_ROOT=${WEIGHTS_ROOT:-$PROJECT_ROOT/weights}
 export THIRD_PARTY=${THIRD_PARTY:-$PROJECT_ROOT/third_party}
 export PIP_CACHE_DIR=${PIP_CACHE_DIR:-$PROJECT_ROOT/.cache/pip}
@@ -40,10 +46,12 @@ if [ ! -x "$CONDA_ROOT/bin/conda" ]; then
 fi
 # shellcheck disable=SC1091
 source "$CONDA_ROOT/etc/profile.d/conda.sh"
-if ! conda env list | awk '{print $1}' | grep -qx "$SAGE_ENV"; then
-  conda create -y -n "$SAGE_ENV" -c conda-forge python=3.10 git
+ENV_PREFIX=$CONDA_ROOT/envs/$SAGE_ENV
+if [ ! -d "$ENV_PREFIX" ]; then
+  conda create -y -p "$ENV_PREFIX" -c conda-forge python=3.10 git
 fi
-conda activate "$SAGE_ENV"
+echo "using conda env $ENV_PREFIX"
+conda activate "$ENV_PREFIX"
 python -m pip install --upgrade pip wheel
 
 echo "== [2/5] PyTorch + deps =="
@@ -105,7 +113,7 @@ echo "== [5/5] environment lock =="
 lock=$PROJECT_ROOT/locks/env_$(date +%Y%m%d_%H%M%S)
 mkdir -p "$lock"
 python -m pip freeze > "$lock/pip_freeze.txt"
-conda env export -n "$SAGE_ENV" > "$lock/conda_env.yml"
+conda env export -p "$ENV_PREFIX" > "$lock/conda_env.yml"
 for d in DIRE UniversalFakeDetect QEBA; do
   echo "$d $(git -C "$THIRD_PARTY/$d" rev-parse HEAD)"
 done > "$lock/third_party_commits.txt"
