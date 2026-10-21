@@ -4,14 +4,17 @@ Steps: scan -> sha256 -> exact / near-duplicate removal (pHash) -> optional excl
 detector-training images -> seeded split (20261008) -> 256x256 canvas (center crop + bicubic,
 lossless PNG) -> manifest.csv + manifest_meta.json.
 
-Example:
+Example (UMHPC, DIRE_ROOT=/scr/user/eric123/datasets/DIRE; slurm/01_prepare.sbatch runs exactly this):
     python scripts/data/build_manifest.py \
-        --real  $DATA_ROOT/raw/DiffusionForensics/images/test/lsun_bedroom/real \
-        --sdv1  $DATA_ROOT/raw/DiffusionForensics/images/test/lsun_bedroom/sdv1_new \
-        --sdv2  $DATA_ROOT/raw/DiffusionForensics/images/test/lsun_bedroom/sdv2 \
-        --exclude $DATA_ROOT/raw/DiffusionForensics/images/train/lsun_bedroom/real \
-        --dataset-version "DiffusionForensics (DIRE, RecDrive download 2026-10-xx)" \
+        --real  $DIRE_ROOT/images/test/lsun_bedroom/real $DIRE_ROOT/images/val/lsun_bedroom/real \
+        --sdv1  $DIRE_ROOT/images/test/lsun_bedroom/sdv1_new \
+        --sdv2  $DIRE_ROOT/images/test/lsun_bedroom/sdv2 \
+        --exclude $DIRE_ROOT/images/train/lsun_bedroom/real \
+        --dataset-version "DiffusionForensics (DIRE benchmark) at $DIRE_ROOT" \
         --out $DATA_ROOT/sage_v1
+
+Several folders per class are pooled before the split (test/lsun_bedroom/real alone has exactly 1000
+images, 15 of which duplicate DIRE training images).
 """
 import argparse
 import csv
@@ -71,7 +74,8 @@ def scan(folder, label, size):
         with Image.open(p) as im:
             w, h = im.size
             ph = phash_int(to_canvas(im, size))
-        rows.append(dict(cls=label, src_path=str(p), src_sha256=sha256(p), src_w=w, src_h=h, phash=ph))
+        rows.append(dict(cls=label, src_dir=str(folder), src_path=str(p), src_sha256=sha256(p),
+                         src_w=w, src_h=h, phash=ph))
         if (i + 1) % 500 == 0:
             print(f"  {label}: {i + 1}/{len(files)}", flush=True)
     print(f"{label}: {len(rows)} files", flush=True)
@@ -141,9 +145,9 @@ def exclude(rows, folders, thr, size):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--real", required=True)
-    ap.add_argument("--sdv1", required=True)
-    ap.add_argument("--sdv2", required=True)
+    ap.add_argument("--real", nargs="+", required=True, help="one or more folders, pooled before the split")
+    ap.add_argument("--sdv1", nargs="+", required=True)
+    ap.add_argument("--sdv2", nargs="+", required=True)
     ap.add_argument("--exclude", nargs="*", default=[], help="folders whose images must not appear (e.g. detector training data)")
     ap.add_argument("--config", default=str(Path(__file__).resolve().parents[2] / "configs/sage_v1.0.json"))
     ap.add_argument("--out", required=True)
@@ -160,8 +164,9 @@ def main():
         sys.exit(f"{out}/manifest.csv exists - the split is frozen; use a new --out to rebuild")
 
     rows = []
-    for cls, folder in (("real", args.real), ("sdv1", args.sdv1), ("sdv2", args.sdv2)):
-        rows += scan(folder, cls, size)
+    for cls, folders in (("real", args.real), ("sdv1", args.sdv1), ("sdv2", args.sdv2)):
+        for folder in folders:
+            rows += scan(folder, cls, size)
     rows, removed_dup = dedup(rows, args.phash_thr)
     rows, removed_ex = exclude(rows, args.exclude, args.phash_thr, size)
 
@@ -232,6 +237,9 @@ def main():
         canvas=cfg["canvas"], resize_impl=f"PIL {Image.__version__} BICUBIC after center crop",
         seeds=seeds, phash_threshold=args.phash_thr, counts=counts,
         removed={"duplicates": len(removed_dup), "excluded_overlap": len(removed_ex)},
+        selected_by_source={s: {c: {d: sum(1 for r in selected if r["subset"] == s and r["cls"] == c and r["src_dir"] == d)
+                                    for d in sorted({r["src_dir"] for r in selected if r["cls"] == c})}
+                                for c in CLASSES} for s in SUBSETS},
         unused_after_split={c: len(by_cls[c]) - sum(counts[s][c] for s in SUBSETS) for c in CLASSES},
         manifest_sha256=sha256(out / "manifest.csv"),
         python=platform.python_version(), numpy=np.__version__,

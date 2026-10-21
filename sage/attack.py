@@ -45,17 +45,20 @@ def sage_attack(x_o, oracle, ctx, generator, info):
     yield from sbqr(x_o, start, W, oracle, cfg, generator, info)
 
 
-def make_sage_task(x_o, ctx, seed_gen, stop_on_success=True):
-    oracle = QueryOracle(x_o, ctx.perceptual, ctx.cfg, stop_on_success)
+def make_sage_task(x_o, ctx, seed_gen, stop_on_success=True, log=None):
+    oracle = QueryOracle(x_o, ctx.perceptual, ctx.cfg, stop_on_success, log)
     info = {}
     return managed(sage_attack(x_o, oracle, ctx, seed_gen(), info), oracle, info)
 
 
-def controls_task(x_o, ctx, seed_gen, variants=("uniform", "lowfreq", "learned"), stop_on_success=True):
+CONTROL_VARIANTS = ("uniform", "lowfreq", "learned")
+
+
+def controls_task(x_o, ctx, seed_gen, variants=CONTROL_VARIANTS, stop_on_success=True, log=None):
     """Shared verified start (reference initialisation, full cost charged to each variant), then the
     identical SBQR engine with uniform / fixed low-frequency / ASA-learned weights."""
     cfg = ctx.cfg
-    base = QueryOracle(x_o, ctx.perceptual, cfg, stop_on_success)
+    base = QueryOracle(x_o, ctx.perceptual, cfg, stop_on_success, log)
     init_info = {}
     start, stop = None, None
     try:

@@ -80,6 +80,39 @@ if (W / "guided_diffusion/lsun_bedroom.pt").is_file():
 else:
     print("skipped (lsun_bedroom.pt missing)")
 
+section("Full detector queries at the attack batch shape (fixed_batch, deterministic labels)")
+failed = []
+if not missing:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from sage.config import load_config
+    from sage.detectors import build_detector, fixed_batch
+
+    cfg = load_config()
+    g = torch.Generator().manual_seed(0)
+    imgs = torch.rand(48, 3, 256, 256, generator=g)
+    for name, batches in (("ufd", (64,)), ("dire", (32, 64))):
+        det = build_detector(name, "cuda", cfg)
+        for bs in batches:
+            f = fixed_batch(det.prob_fake, bs)
+            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.synchronize(); t = time.time()
+            p1 = f(imgs.cuda())
+            torch.cuda.synchronize(); dt = time.time() - t
+            perm = torch.randperm(len(imgs), generator=g)
+            p2 = f(imgs[perm].cuda())[torch.argsort(perm)]       # same images, other batch positions
+            p3 = f(imgs[:5].cuda())                              # mostly padding
+            same = torch.equal(p1, p2) and torch.equal(p1[:5], p3)
+            print(f"{name} batch {bs}: {dt / len(imgs) * 1e3:7.1f} ms/query-image | peak "
+                  f"{torch.cuda.max_memory_allocated() / 2**30:.1f} GiB | identical across batch positions: {same} "
+                  f"| max |dp| {float((p1 - p2).abs().max()):.2e}")
+            if not same:
+                failed.append(f"{name} batch {bs} not position-invariant")
+        del det
+        torch.cuda.empty_cache()
+
+if failed:
+    print(f"\nFAILED: {'; '.join(failed)}")
+    sys.exit(1)
 if missing:
     print(f"\nFAILED: missing weights: {', '.join(missing)}")
     sys.exit(1)

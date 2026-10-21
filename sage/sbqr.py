@@ -38,11 +38,10 @@ def sbqr(x_o, x_start, W, oracle, cfg, generator, info):
             stats["stop"] = "degenerate_direction"
             break
         x_perp = (x.to(torch.float64) + gamma * dn * eta).clamp(0, 1)
-        x_new = (x_perp + lam * (xo64 - x_perp)).clamp(0, 1)
+        x_new = (x_perp + lam * (xo64 - x_perp)).clamp(0, 1).to(torch.float32)   # the image actually queried
         stats["proposals"] += 1
         win_n += 1
-        if (x_new - xo64).norm() < dn * (1 - s["min_rel_l2_improvement"]):
-            x_new = x_new.to(torch.float32)
+        if (x_new.to(torch.float64) - xo64).norm() < dn * (1 - s["min_rel_l2_improvement"]):
             if (yield from oracle.query(x_new)):
                 x = x_new
                 win_acc += 1

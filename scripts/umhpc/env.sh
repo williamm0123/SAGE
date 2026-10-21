@@ -1,13 +1,20 @@
 # Source this at the top of every UMHPC job / interactive shell:
-#   source $PROJECT_ROOT/scripts/umhpc/env.sh
+#   source /scr/user/eric123/project/SAGE/scripts/umhpc/env.sh
 # Paths can be overridden by exporting them before sourcing.
 
-export PROJECT_ROOT=${PROJECT_ROOT:-$HOME/SAGE}
-export CONDA_ROOT=${CONDA_ROOT:-$HOME/miniforge3}
+# Repository root = two levels above this file (works wherever the repo was cloned).
+export PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 export SAGE_ENV=${SAGE_ENV:-sage}
+if [ -z "${CONDA_ROOT:-}" ]; then
+  if [ -n "${CONDA_EXE:-}" ]; then CONDA_ROOT=$(dirname "$(dirname "$CONDA_EXE")")
+  else CONDA_ROOT=$HOME/miniforge3; fi
+fi
+export CONDA_ROOT
 
-# Large data lives outside $HOME if your home quota is small (check with `quota -s` / `df -h ~`).
-export DATA_ROOT=${DATA_ROOT:-$PROJECT_ROOT/data}
+# DiffusionForensics (DIRE benchmark), already extracted on UMHPC:
+#   $DIRE_ROOT/images/{train,val,test}/{lsun_bedroom,imagenet,celebahq}/{real,adm,sdv1_new,sdv2,...}
+export DIRE_ROOT=${DIRE_ROOT:-/scr/user/eric123/datasets/DIRE}
+export DATA_ROOT=${DATA_ROOT:-$PROJECT_ROOT/data}       # frozen 256x256 manifest goes to $DATA_ROOT/sage_v1
 export WEIGHTS_ROOT=${WEIGHTS_ROOT:-$PROJECT_ROOT/weights}
 export THIRD_PARTY=${THIRD_PARTY:-$PROJECT_ROOT/third_party}
 

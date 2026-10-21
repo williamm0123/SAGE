@@ -16,6 +16,14 @@ class SpectralPrior:
         self.delta = P_r - P_f
         self.meta = meta or {}
 
+    @property
+    def sha256(self):
+        """Content hash of the two mean spectra (independent of file compression and metadata)."""
+        h = hashlib.sha256()
+        for P in (self.P_r, self.P_f):
+            h.update(P.detach().to("cpu", torch.float64).contiguous().numpy().tobytes())
+        return h.hexdigest()
+
     def to(self, device):
         return SpectralPrior(self.P_r.to(device), self.P_f.to(device), self.meta)
 

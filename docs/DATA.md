@@ -9,82 +9,66 @@
 | Validation  |  100 |    50 |    50 |   200 |
 | Test        |  400 |   200 |   200 |   800 |
 
-## 1. 选哪个子集
-
-DiffusionForensics 的目录是 `images/{train,val,test}/{lsun_bedroom,imagenet,celebahq}/{real,adm,...}`
-（另有 `recons/`、`dire/` 两个平行目录，**我们不需要**——DIRE 图必须对攻击后的图在线重算）。
-
-推荐用 **`images/test/lsun_bedroom/`** 下的：
-
-- `real/` — LSUN bedroom 真实图
-- `sdv1_new/`（或 `sdv1/`）— Stable Diffusion v1
-- `sdv2/` — Stable Diffusion v2
-
-理由：SD-v1 与 SD-v2 在 lsun_bedroom 下同场景同分辨率，real 与 fake 内容域一致，
-可减小 SAP 先验混入“场景差异”的风险（论文第 6 节的主要威胁之一）；
-且 DIRE 有对应的 `lsun_adm.pth` 检测器和 ADM `lsun_bedroom.pt` 重建模型。
-
-> 文件夹名请以实际下载内容为准（`ls` 一下）。DIRE 自带的 `compute_dire.sh` 示例里还出现了
-> `imagenet/sdv1`；如果 lsun_bedroom 下没有 sdv2，就要改用 imagenet 子集并换成
-> `256x256_diffusion_uncond.pt` + `imagenet_adm.pth`，并在论文中如实记录。
-
-**与检测器训练数据的重叠**：DIRE 的 `lsun_adm.pth` 是在 `train/lsun_bedroom/{real,adm}` 上训练的；
-UniversalFakeDetect 在 ProGAN/LSUN 数据上训练。我们只用 `test/` 划分，并且把
-`train/lsun_bedroom/real` 作为 `--exclude` 传给 manifest 脚本做哈希+pHash 重叠检查。
-UFD 训练集（CNNDetection ProGAN 数据，LSUN 多类）若无法下载比对，就在论文里写明“未解决的潜在重叠”。
-
-## 2. 下载（在你自己的电脑上）
-
-DiffusionForensics 和 DIRE 检测器权重只放在网盘上（密码 `dire`），需要浏览器手动下载，
-链接见 <https://github.com/ZhendongWang6/DIRE#readme>（RecDrive / BaiduDrive / OneDrive）。
-
-只需要下载：
+## 1. 数据位置（UMHPC，已解压）
 
 ```
-DiffusionForensics/images/test/lsun_bedroom/real/
-DiffusionForensics/images/test/lsun_bedroom/sdv1_new/   (或 sdv1/)
-DiffusionForensics/images/test/lsun_bedroom/sdv2/
-DiffusionForensics/images/train/lsun_bedroom/real/      (仅用于重叠检查，可选)
-DIRE 检测器权重: lsun_adm.pth
+DIRE_ROOT=/scr/user/eric123/datasets/DIRE          # scripts/umhpc/env.sh 的默认值
+$DIRE_ROOT/images/{train,val,test}/{lsun_bedroom,imagenet,celebahq}/{real,adm,...}
+$DIRE_ROOT/{recons,dire}/...                       # 不使用：DIRE 图必须对攻击后的图在线重算
 ```
 
-记录下载日期、链接、压缩包文件名和 sha256（写进 `--dataset-version`）。
+项目代码：`/scr/user/eric123/project/SAGE`（git pull）；处理后的 manifest 写到
+`$PROJECT_ROOT/data/sage_v1`，权重在 `$PROJECT_ROOT/weights`。
 
-## 3. 上传到 UMHPC
+## 2. 用哪些子集
 
-只上传需要的约 2.2 GB（不是整个 141 GB），**上传压缩包、在 UMHPC 上解压**：
+只有 `test/lsun_bedroom/` 同时有 SD-v1 与 SD-v2（train/val 的 lsun_bedroom 只有 adm/iddpm/pndm/stylegan）：
+
+| 类别 | 目录 | 张数 | 原始格式 |
+|---|---|---:|---|
+| real | `images/test/lsun_bedroom/real` + `images/val/lsun_bedroom/real` | 1000 + 1000 | JPEG，短边 256 |
+| sdv1 | `images/test/lsun_bedroom/sdv1_new` | 1000 | PNG 512² |
+| sdv2 | `images/test/lsun_bedroom/sdv2` | 1000 | PNG 768² |
+| 重叠检查 | `images/train/lsun_bedroom/real`（DIRE `lsun_adm.pth` 的训练集） | 40000 | JPEG |
+
+**为什么 real 要并入 val**：`test/lsun_bedroom/real` 恰好 1000 张，其中 15 张与 DIRE 训练集
+近重复（pHash 汉明距离 0–4，多数为 0 且同尺寸），排除后只剩 985 < Table 1 需要的 1000，
+manifest 脚本会直接报错退出。`val/lsun_bedroom/real` 是 DIRE 的验证集（非训练集），
+与训练集重叠的 16 张同样会被排除。两个目录先合并、再按 split seed 划分；
+`manifest_meta.json` 的 `selected_by_source` 记录每个子集各来自哪个目录，论文中需如实说明。
+（本地 dry run：删除 1 张重复 + 30 张训练集重叠，Table 1 计数完全满足。）
+
+`sdv1_new2` 也存在，但沿用 `sdv1_new`（可用 `SDV1_DIR=sdv1_new2` 覆盖，需升协议版本）。
+
+**与检测器训练数据的重叠**：DIRE 的 `lsun_adm.pth` 在 `train/lsun_bedroom/{real,adm}` 上训练，
+已用 `--exclude` 做 sha256 + pHash 排除；UniversalFakeDetect 在 ProGAN/LSUN 数据上训练，
+无法比对的部分在论文中写明“未解决的潜在重叠”。另外 real 为 JPEG、生成图为 PNG 且需下采样，
+这是论文第 6 节所说的采集/压缩差异，预处理无法消除。
+
+## 3. DIRE 检测器权重
+
+`setup_env.sh` 会自动从 `$DIRE_ROOT/checkpoints/lsun_adm.pth`（若存在）复制到
+`$WEIGHTS_ROOT/dire/`；否则从 DIRE README 的网盘链接手动下载后放入该目录。
+
+## 4. 生成 manifest
+
+`slurm/01_prepare.sbatch` 在 `$SAGE_DATA/manifest.csv` 不存在时自动执行下面的命令；也可以在登录节点手动跑（纯 CPU，约 2 分钟）：
 
 ```bash
-bash scripts/data/upload_to_umhpc.sh
-```
-
-脚本会：本地算 sha256 → 建一个 SSH 主连接（只输一次密码）→ 用
-`rsync --partial --append-verify` 逐个上传（断线自动重试，重跑脚本从断点续传）→
-在 UMHPC 上校验 sha256 → 解压到 `~/SAGE/data/raw/DiffusionForensics/images/...` →
-把 `lsun_adm.pth` 放到 `~/SAGE/weights/dire/`。
-
-上传的文件：`images/test/lsun_bedroom/{real,sdv1_new,sdv2}.tar.gz`、
-`images/train/lsun_bedroom/real.tar.gz`（重叠检查用，`INCLUDE_TRAIN_REAL=0` 可跳过）、
-`checkpoints/lsun_adm.pth`。注意 DIRE 的 `test/lsun_bedroom/real.tar.gz` 实际是未压缩 tar，
-`tar -xf` 会自动识别。
-
-## 4. 生成 manifest（登录节点或 CPU 作业均可，无需 GPU）
-
-```bash
-source ~/SAGE/scripts/umhpc/env.sh
+cd /scr/user/eric123/project/SAGE && source scripts/umhpc/env.sh
 python scripts/data/build_manifest.py \
-  --real  $DATA_ROOT/raw/DiffusionForensics/images/test/lsun_bedroom/real \
-  --sdv1  $DATA_ROOT/raw/DiffusionForensics/images/test/lsun_bedroom/sdv1_new \
-  --sdv2  $DATA_ROOT/raw/DiffusionForensics/images/test/lsun_bedroom/sdv2 \
-  --exclude $DATA_ROOT/raw/DiffusionForensics/images/train/lsun_bedroom/real \
-  --dataset-version "DiffusionForensics via RecDrive, downloaded 2026-10-xx, <zip sha256>" \
+  --real  $DIRE_ROOT/images/test/lsun_bedroom/real $DIRE_ROOT/images/val/lsun_bedroom/real \
+  --sdv1  $DIRE_ROOT/images/test/lsun_bedroom/sdv1_new \
+  --sdv2  $DIRE_ROOT/images/test/lsun_bedroom/sdv2 \
+  --exclude $DIRE_ROOT/images/train/lsun_bedroom/real \
+  --dataset-version "DiffusionForensics (DIRE benchmark) at $DIRE_ROOT" \
   --out $DATA_ROOT/sage_v1
 python scripts/data/verify_manifest.py $DATA_ROOT/sage_v1
 ```
 
 脚本做的事情（对应论文 4.1 / 4.4）：
 
-1. 扫描图像，计算原始文件 sha256；
+1. 扫描图像（每类可给多个目录，先合并），计算原始文件 sha256；
 2. 在 256 画布上算 64-bit pHash，**精确重复 + 近重复（Hamming ≤ 4）** 合并成组，每组保留一张；
    同一内容同时出现在 real 和 fake 中则整组删除；
 3. 与 `--exclude` 目录（检测器训练数据）做重叠检查并删除；

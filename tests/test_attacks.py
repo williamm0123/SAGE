@@ -143,3 +143,19 @@ def test_sbqr_contracts_from_interior(setup):
     r = drive(det, [(0, gen)])[0]
     assert r["sbqr"]["accepted"] > 10
     assert r["best_real"]["l2"] < 0.95 * float((ctx.refs[0] - x_o).norm())   # boundary sits at ~0.88
+
+
+def test_fixed_batch_pads_every_call(setup):
+    from sage.detectors import fixed_batch
+
+    det, fakes, ctx = setup
+    sizes = []
+
+    def fn(x):
+        sizes.append(len(x))
+        return det.predict_real(x)
+
+    xs = torch.cat([ctx.refs, torch.stack(fakes)])
+    out = fixed_batch(fn, 4)(xs)
+    assert sizes == [4] * ((len(xs) + 3) // 4)
+    assert torch.equal(out, det.predict_real(xs))

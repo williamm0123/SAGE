@@ -17,7 +17,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sage.config import load_config  # noqa: E402
 from sage.data import Manifest  # noqa: E402
-from sage.detectors import build_detector  # noqa: E402
+from sage.detectors import build_detector, fixed_batch  # noqa: E402
 from sage.runinfo import run_metadata  # noqa: E402
 
 
@@ -26,7 +26,8 @@ def main():
     ap.add_argument("--data", required=True)
     ap.add_argument("--detector", required=True, choices=["ufd", "dire"])
     ap.add_argument("--subsets", nargs="+", default=["validation", "test"])
-    ap.add_argument("--batch-size", type=int, default=32)
+    ap.add_argument("--batch-size", type=int, default=None,
+                    help="fixed detector batch, zero-padded (default: 32 dire / 64 ufd, same as run_attacks.py)")
     ap.add_argument("--out", default="results/screening")
     ap.add_argument("--config", default=None)
     args = ap.parse_args()
@@ -35,16 +36,18 @@ def main():
     m = Manifest(args.data)
     device = "cuda"
     det = build_detector(args.detector, device, cfg)
+    bs = args.batch_size or (32 if args.detector == "dire" else 64)
+    prob_fake = fixed_batch(det.prob_fake, bs)
     rows = [r for s in args.subsets for r in m.select(s)]
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
     records = []
-    for i in range(0, len(rows), args.batch_size):
-        chunk = rows[i:i + args.batch_size]
+    for i in range(0, len(rows), bs):
+        chunk = rows[i:i + bs]
         x = torch.stack([m.load(r) for r in chunk]).to(device)
-        p = det.prob_fake(x).cpu()
+        p = prob_fake(x).cpu()
         for r, pf in zip(chunk, p.tolist()):
             records.append(dict(id=r["id"], cls=r["cls"], subset=r["subset"], prob_fake=pf,
                                 pred_real=int(pf <= det.threshold)))
@@ -67,7 +70,8 @@ def main():
             summary[f"{s}/{c}"] = {"n": len(rs), key: n_fake_pred / len(rs),
                                    **({} if c == "real" else {"eligible": n_fake_pred})}
     meta = run_metadata(cfg, dict(detector=det.describe(), manifest_sha256=m.sha256,
-                                  seconds=seconds, seconds_per_image=seconds / len(rows)))
+                                  seconds=seconds, seconds_per_image=seconds / len(rows),
+                                  detector_batch=bs))
     (out / f"{args.detector}_summary.json").write_text(json.dumps(dict(summary=summary, meta=meta), indent=2))
     print(json.dumps(summary, indent=2))
 

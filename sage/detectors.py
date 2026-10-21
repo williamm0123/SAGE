@@ -183,6 +183,26 @@ class LinearToyDetector(Detector):
         return torch.sigmoid(s)
 
 
+def fixed_batch(fn, size):
+    """Wrap a detector function so it always runs on chunks of exactly `size` images (zero-padded).
+
+    The scheduler mixes queries from many attacks, so the number of images per call varies; kernel
+    selection can depend on the batch shape, and near the decision boundary that numerical noise could
+    flip a label. A fixed shape makes every image's label a deterministic function of the image alone.
+    """
+    @torch.no_grad()
+    def wrapped(x):
+        out = []
+        for i in range(0, len(x), size):
+            xi = x[i:i + size]
+            k = len(xi)
+            if k < size:
+                xi = torch.cat([xi, xi.new_zeros((size - k,) + tuple(xi.shape[1:]))])
+            out.append(fn(xi)[:k])
+        return torch.cat(out)
+    return wrapped
+
+
 def build_detector(name, device, cfg):
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True

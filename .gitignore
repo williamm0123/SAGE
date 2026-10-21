@@ -13,6 +13,8 @@ slurm/
 /logs/
 /locks/
 .cache/
+envs/
+scripts/
 *.md
 __pycache__/
 *.pyc

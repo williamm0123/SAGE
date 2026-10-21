@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # One-time environment setup for SAGE on UMHPC (DICC, gpu-a100 partition, A100 80GB, sm_80).
 #
-# Run on the LOGIN node (needs internet; compute nodes may not have it):
-#   export PROJECT_ROOT=$HOME/SAGE          # or a larger filesystem
-#   bash scripts/umhpc/setup_env.sh
+# Run on the LOGIN node (needs internet; compute nodes may not have it), from the repo root:
+#   cd /scr/user/eric123/project/SAGE && bash scripts/umhpc/setup_env.sh
 #
 # What it does:
 #   1. installs Miniforge (if no conda found) and creates the `sage` env (Python 3.10)
@@ -13,8 +12,13 @@
 #   5. writes an environment lock (versions, commits, sha256) to $PROJECT_ROOT/locks/
 set -euo pipefail
 
-export PROJECT_ROOT=${PROJECT_ROOT:-$HOME/SAGE}
-export CONDA_ROOT=${CONDA_ROOT:-$HOME/miniforge3}
+export PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
+if [ -z "${CONDA_ROOT:-}" ]; then
+  if [ -n "${CONDA_EXE:-}" ]; then CONDA_ROOT=$(dirname "$(dirname "$CONDA_EXE")")
+  else CONDA_ROOT=$HOME/miniforge3; fi
+fi
+export CONDA_ROOT
+export DIRE_ROOT=${DIRE_ROOT:-/scr/user/eric123/datasets/DIRE}
 export SAGE_ENV=${SAGE_ENV:-sage}
 export WEIGHTS_ROOT=${WEIGHTS_ROOT:-$PROJECT_ROOT/weights}
 export THIRD_PARTY=${THIRD_PARTY:-$PROJECT_ROOT/third_party}
@@ -23,6 +27,7 @@ export PIP_CACHE_DIR=${PIP_CACHE_DIR:-$PROJECT_ROOT/.cache/pip}
 # Commits inspected when this script was written (2026-10-17). Change only deliberately and re-lock.
 DIRE_COMMIT=1f89fff15f0e478307cdea9abdfe06a52fe7838a
 UFD_COMMIT=030495aea3300a8b54c0ec37ec7fe1dd7e63c619
+QEBA_COMMIT=8ee4a586a1ac5b172da92cc1c8efa9f0e543269c
 
 mkdir -p "$WEIGHTS_ROOT"/{torch,clip,hf,guided_diffusion,dire,ufd} "$THIRD_PARTY" "$PROJECT_ROOT/locks" "$PIP_CACHE_DIR"
 
@@ -52,7 +57,7 @@ clone_at() {  # url dir commit
 }
 clone_at https://github.com/ZhendongWang6/DIRE                  "$THIRD_PARTY/DIRE"                "$DIRE_COMMIT"
 clone_at https://github.com/WisconsinAIVision/UniversalFakeDetect "$THIRD_PARTY/UniversalFakeDetect" "$UFD_COMMIT"
-clone_at https://github.com/AI-secure/QEBA                       "$THIRD_PARTY/QEBA"                ""   # reference for porting QEBA-S
+clone_at https://github.com/AI-secure/QEBA                       "$THIRD_PARTY/QEBA"                "$QEBA_COMMIT"   # reference for the QEBA-S port
 python -m pip install -e "$THIRD_PARTY/DIRE/guided-diffusion"
 cp -n "$THIRD_PARTY/UniversalFakeDetect/pretrained_weights/fc_weights.pth" "$WEIGHTS_ROOT/ufd/"
 
@@ -80,6 +85,10 @@ lpips.LPIPS(net="alex", version="0.1")  # pulls torchvision AlexNet into $TORCH_
 print("CLIP ViT-L/14 + LPIPS(alex) cached")
 PY
 
+# DIRE classifier: the DiffusionForensics download ships it under checkpoints/
+for c in "$DIRE_ROOT/checkpoints/lsun_adm.pth" "$DIRE_ROOT/../checkpoints/lsun_adm.pth"; do
+  if [ ! -s "$WEIGHTS_ROOT/dire/lsun_adm.pth" ] && [ -s "$c" ]; then cp "$c" "$WEIGHTS_ROOT/dire/lsun_adm.pth"; fi
+done
 if [ ! -s "$WEIGHTS_ROOT/dire/lsun_adm.pth" ]; then
   cat <<EOF
 
