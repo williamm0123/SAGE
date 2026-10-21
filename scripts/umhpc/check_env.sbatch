@@ -13,6 +13,6 @@
 set -euo pipefail
 source "${PROJECT_ROOT:-$SLURM_SUBMIT_DIR}/scripts/umhpc/env.sh"
 
-echo "host=$(hostname) job=$SLURM_JOB_ID"
+echo "host=$(hostname) job=${SLURM_JOB_ID:-interactive}"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
 python "$PROJECT_ROOT/scripts/umhpc/env_check.py"
