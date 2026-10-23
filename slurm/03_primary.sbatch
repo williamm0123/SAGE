@@ -7,6 +7,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
+#SBATCH --qos=long
 #SBATCH --output=logs/sage-primary_%A_%a.out
 #SBATCH --array=0-15%1
 # Primary comparison (block 1): 2 detectors x 4 methods x NSHARD shards, one A100 per array task.

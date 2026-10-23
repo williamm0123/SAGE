@@ -7,6 +7,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
+#SBATCH --qos=long
 #SBATCH --output=logs/sage-pilot_%j.out
 # Validation-only pilot (paper Sec. 4.4): 40 generated validation images, seed 0, all methods,
 # both detectors. Checks implementation, eligibility and throughput. Do NOT tune on its ASR.

@@ -7,6 +7,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
+#SBATCH --qos=long
 #SBATCH --output=logs/sage-ctrl-xfer_%A_%a.out
 #SBATCH --array=0-3%1
 # Block 2 (component controls, 100-image subset) and block 3 (SD-v1 -> SD-v2 source-only transfer),

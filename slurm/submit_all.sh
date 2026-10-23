@@ -6,6 +6,8 @@
 #   bash slurm/submit_all.sh --full     # prepare -> primary -> controls/transfer; analysis is submitted
 #                                       # automatically once every run is stored
 #   python experiments/status.py --data data/sage_v1 --results results    # progress at any time
+# Jobs longer than the default QOS limit (pilot, primary, controls/transfer: 3 days) request --qos=long
+# in their #SBATCH headers; resubmitted jobs reuse those headers.
 # Overrides: GPU_SLOTS (parallel single-GPU tasks), NSHARD (shards per detector x method in primary),
 #            NSHARD_CT (shards per block in controls/transfer), SAGE_AUTO_RESUBMIT=0, SAGE_MAX_RESUBMIT.
 set -euo pipefail
