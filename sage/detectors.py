@@ -190,6 +190,7 @@ class AEROBLADE(Detector):
     name = "aeroblade"
 
     def __init__(self, device, threshold, autoencoders, lpips_layer=2):
+        import safetensors.torch  # noqa: F401  diffusers 0.30 calls safetensors.torch without importing it
         from diffusers import AutoencoderKL, VQModel
         import lpips
 

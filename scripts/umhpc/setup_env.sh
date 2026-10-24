@@ -98,6 +98,7 @@ PY
 # pinned in configs/sage_v1.0.json, into $HF_HOME (compute nodes run with HF_HUB_OFFLINE=1).
 HF_HOME=$WEIGHTS_ROOT/hf HF_HUB_OFFLINE=0 PYTHONPATH=$PROJECT_ROOT python - <<'PY'
 import torch
+import safetensors.torch  # noqa: F401  diffusers 0.30 uses safetensors.torch without importing it
 from diffusers import AutoencoderKL, VQModel
 from sage.config import load_config
 for spec in load_config()["detectors"]["aeroblade"]["autoencoders"]:

@@ -88,7 +88,7 @@ if not missing:
     cfg = load_config()
     g = torch.Generator().manual_seed(0)
     imgs = torch.rand(48, 3, 256, 256, generator=g)
-    for name, batches in (("ufd", (64,)), ("aeroblade", (32, 64))):
+    for name, batches in (("ufd", (64,)), ("aeroblade", (1, 32))):   # compare ms/query-image to pick SAGE_BATCH_AEROBLADE
         det = build_detector(name, "cuda", cfg, threshold=0.0)   # threshold irrelevant for the score check
         for bs in batches:
             f = fixed_batch(det.prob_fake, bs)
