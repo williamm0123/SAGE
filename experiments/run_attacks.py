@@ -39,7 +39,7 @@ from sage.baselines import BASELINE_PARAMS, make_baseline_task  # noqa: E402
 from sage.config import load_config  # noqa: E402
 from sage.data import Manifest  # noqa: E402
 from sage.detectors import build_detector, fixed_batch  # noqa: E402
-from sage.experiment import (EXIT_INCOMPLETE, EXIT_LOCK_MISMATCH, append_records, check_lock,  # noqa: E402
+from sage.experiment import (DETECTOR_BATCH, DETECTOR_CONCURRENCY, DETECTORS, EXIT_INCOMPLETE, EXIT_LOCK_MISMATCH, append_records, check_lock,  # noqa: E402
                              code_sha256, done_runs, eligible_ids, expected_runs, load_dir, method_dir,
                              qlog_path, repair_jsonl, resumable, screening_paths, sha256_file,
                              slurm_seconds_left)
@@ -49,8 +49,6 @@ from sage.runinfo import run_metadata  # noqa: E402
 from sage.sap import SpectralPrior  # noqa: E402
 from sage.spectral import full_bands  # noqa: E402
 
-DEFAULT_BATCH = {"dire": 32, "ufd": 64}
-DEFAULT_CONCURRENCY = {"dire": 32, "ufd": 8}
 
 
 def derive_seed(seed, image_id):
@@ -78,7 +76,7 @@ def check_screening(summary_path, manifest_sha, detector, batch):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--experiment", required=True, choices=["pilot", "primary", "controls", "transfer"])
-    ap.add_argument("--detector", required=True, choices=["ufd", "dire"])
+    ap.add_argument("--detector", required=True, choices=list(DETECTORS))
     ap.add_argument("--method", default="sage", choices=["sage", "ba", "hsja", "qeba"])
     ap.add_argument("--data", required=True)
     ap.add_argument("--prior", required=True, help="SAP prior .npz (mixed for primary/controls, sdv1-only for transfer)")
@@ -86,9 +84,9 @@ def main():
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--num-shards", type=int, default=1)
     ap.add_argument("--limit", type=int, default=None, help="debug: only the first N targets (do not use for results)")
-    ap.add_argument("--concurrency", type=int, default=None, help="attacks run concurrently (default: 32 dire / 8 ufd)")
+    ap.add_argument("--concurrency", type=int, default=None, help="attacks run concurrently (default: sage/experiment.py DETECTOR_CONCURRENCY)")
     ap.add_argument("--max-batch", type=int, default=None,
-                    help="fixed images per detector call, zero-padded (default: 32 dire / 64 ufd; must equal screening)")
+                    help="fixed images per detector call, zero-padded (default: DETECTOR_BATCH; must equal screening)")
     ap.add_argument("--fixed-budget", action="store_true", help="continue after first success (fixed-budget quality mode)")
     ap.add_argument("--save-images", type=int, default=0,
                     help="store x_o and the reported candidate for up to N successes and N failures (figures)")
@@ -143,9 +141,9 @@ def main():
     if not todo:
         return 0
 
-    max_batch = args.max_batch or DEFAULT_BATCH[args.detector]
-    conc = args.concurrency or DEFAULT_CONCURRENCY[args.detector]
-    detector = build_detector(args.detector, device, cfg)
+    max_batch = args.max_batch or DETECTOR_BATCH[args.detector]
+    conc = args.concurrency or DETECTOR_CONCURRENCY[args.detector]
+    detector = build_detector(args.detector, device, cfg, results=args.out)
     problems = check_screening(screening_json, m.sha256, detector, max_batch)
     if problems:
         print("ERROR screening does not match this run:\n  " + "\n  ".join(problems), flush=True)

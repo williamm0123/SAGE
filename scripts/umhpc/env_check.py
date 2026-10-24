@@ -38,8 +38,6 @@ print("numpy", numpy.__version__, "| lpips ok | guided_diffusion", guided_diffus
 
 section("Weights")
 required = {
-    "ADM lsun_bedroom": W / "guided_diffusion/lsun_bedroom.pt",
-    "DIRE lsun_adm": W / "dire/lsun_adm.pth",
     "UFD fc head": W / "ufd/fc_weights.pth",
     "CLIP ViT-L/14": W / "clip/ViT-L-14.pt",
 }
@@ -90,8 +88,8 @@ if not missing:
     cfg = load_config()
     g = torch.Generator().manual_seed(0)
     imgs = torch.rand(48, 3, 256, 256, generator=g)
-    for name, batches in (("ufd", (64,)), ("dire", (32, 64))):
-        det = build_detector(name, "cuda", cfg)
+    for name, batches in (("ufd", (64,)), ("aeroblade", (32, 64))):
+        det = build_detector(name, "cuda", cfg, threshold=0.0)   # threshold irrelevant for the score check
         for bs in batches:
             f = fixed_batch(det.prob_fake, bs)
             torch.cuda.reset_peak_memory_stats()

@@ -90,7 +90,21 @@ spec = importlib.util.spec_from_file_location("ufd_clip", init, submodule_search
 clip = importlib.util.module_from_spec(spec); sys.modules["ufd_clip"] = clip; spec.loader.exec_module(clip)
 clip.load("ViT-L/14", device="cpu", download_root=os.environ["CLIP_CACHE"])
 lpips.LPIPS(net="alex", version="0.1")  # pulls torchvision AlexNet into $TORCH_HOME
-print("CLIP ViT-L/14 + LPIPS(alex) cached")
+lpips.LPIPS(net="vgg", version="0.1")   # VGG16 backbone for AEROBLADE's LPIPS layer-2 distance
+print("CLIP ViT-L/14 + LPIPS(alex, vgg) cached")
+PY
+
+# AEROBLADE autoencoders (SD1 VAE, SD2 VAE = stabilityai/sd-vae-ft-mse, Kandinsky 2.1 MoVQ) at the revisions
+# pinned in configs/sage_v1.0.json, into $HF_HOME (compute nodes run with HF_HUB_OFFLINE=1).
+HF_HOME=$WEIGHTS_ROOT/hf HF_HUB_OFFLINE=0 PYTHONPATH=$PROJECT_ROOT python - <<'PY'
+import torch
+from diffusers import AutoencoderKL, VQModel
+from sage.config import load_config
+for spec in load_config()["detectors"]["aeroblade"]["autoencoders"]:
+    kw = dict(revision=spec["revision"], torch_dtype=torch.float16, use_safetensors=True)
+    kw.update({k: spec[k] for k in ("subfolder", "variant") if spec.get(k)})
+    (VQModel if spec["type"] == "vq" else AutoencoderKL).from_pretrained(spec["repo"], **kw)
+    print("cached", spec["repo"], spec["revision"][:10])
 PY
 
 # DIRE classifier: the DiffusionForensics download ships it under checkpoints/

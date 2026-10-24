@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sage.config import load_config  # noqa: E402
 from sage.data import Manifest  # noqa: E402
-from sage.experiment import (done_runs, eligible_ids, expected_runs, load_dir, method_dir, methods_of,  # noqa: E402
+from sage.experiment import (DETECTORS, done_runs, eligible_ids, expected_runs, load_dir, method_dir, methods_of,  # noqa: E402
                              screening_paths)
 
 
@@ -37,7 +37,7 @@ def _dirs(experiment):
     return list(dict.fromkeys(method_dir(experiment, mm) for mm in methods_of(experiment)))
 
 
-def collect_status(results, m, cfg, experiments=("primary", "controls", "transfer"), detectors=("ufd", "dire")):
+def collect_status(results, m, cfg, experiments=("primary", "controls", "transfer"), detectors=DETECTORS):
     results = Path(results)
     rows = []
     for exp in experiments:
@@ -108,7 +108,7 @@ def main():
     ap.add_argument("--results", default="results")
     ap.add_argument("--config", default=None)
     ap.add_argument("--experiments", nargs="+", default=["primary", "controls", "transfer"])
-    ap.add_argument("--detectors", nargs="+", default=["ufd", "dire"])
+    ap.add_argument("--detectors", nargs="+", default=list(DETECTORS))
     ap.add_argument("--require-complete", action="store_true")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--json", default=None, help="also write the rows to this file")

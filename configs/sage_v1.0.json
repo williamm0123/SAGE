@@ -90,7 +90,22 @@
       "input": "center_crop_224_clip_norm",
       "threshold": 0.5
     },
+    "aeroblade": {
+      "method": "AEROBLADE (Ricker et al., CVPR 2024), github.com/jonasricker/aeroblade @ 50fc2b2",
+      "autoencoders": [
+        {"repo": "CompVis/stable-diffusion-v1-1", "subfolder": "vae", "variant": "fp16", "type": "kl",
+         "revision": "574555a657f0c8d6e970a02c7e095e9d4220dcbf"},
+        {"repo": "stabilityai/sd-vae-ft-mse", "type": "kl", "note": "identical weights to the SD2-base VAE (sha256 a1d99348...)",
+         "revision": "31f26fdeee1355a5c34592e401dd41e45d25a493"},
+        {"repo": "kandinsky-community/kandinsky-2-1", "subfolder": "movq", "type": "vq",
+         "revision": "04b366659663bf60deacb96fd3e38f1cb39a3be4"}
+      ],
+      "lpips_layer": 2,
+      "threshold": "calibrated",
+      "calibration": {"split": "development", "criterion": "max_balanced_accuracy"}
+    },
     "dire": {
+      "status": "not used: the released lsun_adm.pth separates JPEG-compressed from PNG DIRE maps, not real from generated",
       "classifier": "DIRE lsun_adm.pth (ResNet-50)",
       "recon_model": "guided-diffusion lsun_bedroom.pt",
       "timestep_respacing": "ddim20",

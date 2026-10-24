@@ -170,6 +170,108 @@ class DIRE(Detector):
                     transform="2x-1 -> ddim20 inversion+sampling -> |x-recon| -> uint8 -> crop224 -> imagenet_norm")
 
 
+class AEROBLADE(Detector):
+    """Ricker et al., CVPR 2024 (training-free), following github.com/jonasricker/aeroblade @ 50fc2b2.
+
+    For each latent-diffusion autoencoder (SD1 VAE, SD2 VAE, Kandinsky 2.1 MoVQ):
+        x in [0,1] -> 2x-1 -> encode -> latent sample (seed 1) -> decode -> /2+0.5 -> clip
+        -> uint8 quantisation (the official code stores reconstructions as PNG)
+        -> distance = spatial mean of LPIPS-VGG(v0.1) layer 2 (the official "lpips_vgg_2")
+    score = max over autoencoders of (-distance); a small reconstruction error means "generated".
+    SD VAEs use fp16 weights computed in fp32 (official upcast_vae); MoVQ runs in fp16.
+
+    Departures needed for a label-only oracle: the latent noise is drawn from a fresh seed-1 generator
+    for every image (official: one generator per directory, so noise depended on file order), and the
+    forward pass runs without cuDNN and with classic attention, making the score a function of the
+    image alone (independent of batch position); AEROBLADE defines no decision threshold, so `threshold`
+    (in score units) is calibrated once on the development split (experiments/calibrate_threshold.py)
+    and frozen before screening. prob_fake returns the raw score; Real iff score <= threshold.
+    """
+    name = "aeroblade"
+
+    def __init__(self, device, threshold, autoencoders, lpips_layer=2):
+        from diffusers import AutoencoderKL, VQModel
+        import lpips
+
+        self.device, self.threshold, self.layer = device, threshold, lpips_layer
+        self.aes, self.files = [], {}
+        for spec in autoencoders:
+            kw = dict(revision=spec["revision"], torch_dtype=torch.float16, use_safetensors=True)
+            if spec.get("subfolder"):
+                kw["subfolder"] = spec["subfolder"]
+            if spec.get("variant"):
+                kw["variant"] = spec["variant"]
+            if spec["type"] == "vq":
+                ae = VQModel.from_pretrained(spec["repo"], **kw).half()
+            else:
+                ae = AutoencoderKL.from_pretrained(spec["repo"], **kw).half().float()
+            # Classic (bmm) attention instead of fused SDPA kernels, so the computation does not depend on
+            # which fused kernel a given GPU / batch shape selects.
+            from diffusers.models.attention_processor import Attention, AttnProcessor
+            for mod in ae.modules():
+                if isinstance(mod, Attention):
+                    mod.set_processor(AttnProcessor())
+            self.aes.append(ae.to(device).eval())
+            self.files[spec["repo"]] = (spec["repo"], f"{spec['revision']}:{_state_sha256(ae)}")
+        self._vq = VQModel
+        self.lpips = lpips.LPIPS(net="vgg", version="0.1", spatial=True, verbose=False).to(device).eval()
+        self.autoencoders = autoencoders
+
+    @torch.no_grad()
+    def _distance(self, a, b):
+        lp, k = self.lpips, self.layer - 1          # layer 2 = second VGG stage (index 1)
+        fa, fb = lp.net.forward(lp.scaling_layer(2 * a - 1)), lp.net.forward(lp.scaling_layer(2 * b - 1))
+        import lpips
+        d = (lpips.normalize_tensor(fa[k]) - lpips.normalize_tensor(fb[k])) ** 2
+        return lp.lins[k](d).mean((1, 2, 3))
+
+    @torch.no_grad()
+    def prob_fake(self, x):
+        # cuDNN off: its fp32 strided-convolution kernels made a VAE output depend on the image's position in
+        # the batch (~1e-6 relative, measured), so the label would not be a function of the image alone.
+        with torch.backends.cudnn.flags(enabled=False):
+            return self._score(x)
+
+    def _score(self, x):
+        x = x.to(self.device, torch.float32)
+        scores = []
+        for ae in self.aes:
+            enc = ae.encode((x * 2 - 1).to(ae.dtype))
+            if isinstance(ae, self._vq):
+                rec = ae.decode(enc.latents, force_not_quantize=True).sample
+            else:
+                dist = enc.latent_dist
+                g = torch.Generator().manual_seed(1)
+                eps = torch.randn(dist.mean.shape[1:], generator=g).to(self.device, dist.mean.dtype)
+                rec = ae.decode(dist.mean + dist.std * eps[None]).sample
+            rec = ((rec.float() / 2 + 0.5).clamp(0, 1) * 255).to(torch.uint8).float() / 255
+            scores.append(-self._distance(x, rec))
+        return torch.stack(scores).max(0).values
+
+    def describe(self):
+        return dict(name=self.name, threshold=self.threshold, files=self.files, lpips_layer=self.layer,
+                    autoencoders=self.autoencoders, score="max_AE(-LPIPS_vgg_2(x, AE(x))); Real iff score <= threshold",
+                    transform="2x-1 -> AE encode/sample(seed 1)/decode -> uint8 -> LPIPS vgg layer 2 spatial mean")
+
+
+def _state_sha256(module):
+    h = hashlib.sha256()
+    for k, v in sorted(module.state_dict().items()):
+        h.update(k.encode())
+        h.update(v.detach().to("cpu", torch.float32).contiguous().numpy().tobytes())
+    return h.hexdigest()
+
+
+def load_calibrated_threshold(name, results):
+    """Threshold frozen by experiments/calibrate_threshold.py (development split, never test)."""
+    import json
+
+    path = Path(results) / "calibration" / f"{name}.json"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} missing: run experiments/calibrate_threshold.py --detector {name} first")
+    return json.loads(path.read_text())["threshold"]
+
+
 class LinearToyDetector(Detector):
     """Deterministic toy detector for tests: fake iff <w, x - b> > 0."""
     name = "toy"
@@ -203,12 +305,19 @@ def fixed_batch(fn, size):
     return wrapped
 
 
-def build_detector(name, device, cfg):
+def build_detector(name, device, cfg, results=None, threshold=None):
+    """threshold: override (calibration only); a "calibrated" config threshold is read from results/calibration."""
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
     d = cfg["detectors"][name]
+    if name == "aeroblade":
+        if threshold is None:
+            threshold = d["threshold"]
+            if threshold == "calibrated":
+                threshold = load_calibrated_threshold(name, results or "results")
+        return AEROBLADE(device, threshold, d["autoencoders"], d.get("lpips_layer", 2))
     if name == "ufd":
         return UniversalFakeDetect(device, threshold=d["threshold"])
     if name == "dire":

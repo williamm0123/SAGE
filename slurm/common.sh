@@ -21,7 +21,7 @@ fi
 # Submit the analysis once every primary / controls / transfer run is stored.
 maybe_analyze() {
   [ "${SAGE_AUTO_ANALYZE:-1}" = 1 ] || return 0
-  if python experiments/status.py --data "$SAGE_DATA" --results "$RESULTS" --quiet --require-complete; then
+  if python experiments/status.py --data "$SAGE_DATA" --results "$RESULTS" --detectors ${SAGE_DETECTORS:-ufd aeroblade} --quiet --require-complete; then
     echo "all experiments complete: submitting analysis $(sbatch --parsable slurm/05_analyze.sbatch)"
   fi
 }

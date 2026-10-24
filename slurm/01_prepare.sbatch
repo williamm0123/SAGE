@@ -4,12 +4,13 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=128G
 #SBATCH --time=06:00:00
+#SBATCH --qos=normal
 #SBATCH --output=logs/sage-prepare_%j.out
-# Frozen manifest (built once from $DIRE_ROOT), offline SAP priors (no detector queries) and clean
-# screening for both detectors (eligibility cost, reported separately, never charged to attack budgets).
+# Frozen manifest (built once from $DIRE_ROOT), offline SAP priors (no detector queries), the AEROBLADE
+# threshold (development split) and clean screening for both detectors (eligibility cost, reported separately, never charged to attack budgets).
 # Every step is skipped when its output already exists, so re-submitting is safe and keeps them frozen.
 source "${PROJECT_ROOT:-$SLURM_SUBMIT_DIR}/slurm/common.sh"
 
@@ -30,6 +31,8 @@ python scripts/data/verify_manifest.py "$SAGE_DATA"
 
 [ -f "$PRIOR_MIXED" ] || python experiments/build_prior.py --data "$SAGE_DATA" --generators sdv1 sdv2 --out "$PRIOR_MIXED"
 [ -f "$PRIOR_SDV1" ]  || python experiments/build_prior.py --data "$SAGE_DATA" --generators sdv1      --out "$PRIOR_SDV1"
-for det in ufd dire; do
+# AEROBLADE has no decision threshold: freeze one on the development split before any screening.
+python experiments/calibrate_threshold.py --data "$SAGE_DATA" --detector aeroblade --out "$RESULTS"
+for det in ufd aeroblade; do
   [ -f "$RESULTS/screening/$det.csv" ] || python experiments/screen_clean.py --data "$SAGE_DATA" --detector "$det" --out "$RESULTS/screening"
 done

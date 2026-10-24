@@ -20,6 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPERIMENTS = ("pilot", "primary", "controls", "transfer")
 PRIMARY_METHODS = ("sage", "ba", "hsja", "qeba")
 CONTROL_METHODS = ("control_uniform", "control_lowfreq", "control_learned")
+DETECTORS = ("ufd", "aeroblade")   # DIRE dropped: released lsun_adm.pth is a JPEG-vs-PNG classifier
+# Images per detector call (zero-padded; identical for calibration, screening and attacks) and concurrent attacks
+# per process (>= batch so that single-image refinement queries fill the batch instead of padding).
+DETECTOR_BATCH = {"ufd": 64, "aeroblade": 32, "dire": 32}
+DETECTOR_CONCURRENCY = {"ufd": 64, "aeroblade": 32, "dire": 32}
 EXIT_INCOMPLETE = 75          # runner stopped before its shard was finished (resubmit to continue)
 EXIT_LOCK_MISMATCH = 3
 

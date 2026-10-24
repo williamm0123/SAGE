@@ -18,16 +18,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sage.config import load_config  # noqa: E402
 from sage.data import Manifest  # noqa: E402
 from sage.detectors import build_detector, fixed_batch  # noqa: E402
+from sage.experiment import DETECTOR_BATCH, DETECTORS  # noqa: E402
 from sage.runinfo import run_metadata  # noqa: E402
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
-    ap.add_argument("--detector", required=True, choices=["ufd", "dire"])
+    ap.add_argument("--detector", required=True, choices=list(DETECTORS))
     ap.add_argument("--subsets", nargs="+", default=["validation", "test"])
     ap.add_argument("--batch-size", type=int, default=None,
-                    help="fixed detector batch, zero-padded (default: 32 dire / 64 ufd, same as run_attacks.py)")
+                    help="fixed detector batch, zero-padded (default: DETECTOR_BATCH, same as run_attacks.py)")
     ap.add_argument("--out", default="results/screening")
     ap.add_argument("--config", default=None)
     args = ap.parse_args()
@@ -35,8 +36,8 @@ def main():
     cfg = load_config(args.config)
     m = Manifest(args.data)
     device = "cuda"
-    det = build_detector(args.detector, device, cfg)
-    bs = args.batch_size or (32 if args.detector == "dire" else 64)
+    det = build_detector(args.detector, device, cfg, results=Path(args.out).parent)
+    bs = args.batch_size or DETECTOR_BATCH[args.detector]
     prob_fake = fixed_batch(det.prob_fake, bs)
     rows = [r for s in args.subsets for r in m.select(s)]
     out = Path(args.out)

@@ -5,10 +5,11 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=01:00:00
+#SBATCH --qos=short
 #SBATCH --output=logs/sage-envcheck_%j.out
 # Submit from $PROJECT_ROOT:  mkdir -p logs && sbatch scripts/umhpc/check_env.sbatch
 # Partition names come from DICC's "Basic HPC Usage" slides; confirm with `cluster-info` / `sinfo -s`.
-# If your account needs it, add:  #SBATCH --account=<your_account>   or   #SBATCH --qos=<qos>
+# DICC QoS wall-time limits: short 1 h, normal 8 h, long 3 days.
 
 set -euo pipefail
 source "${PROJECT_ROOT:-$SLURM_SUBMIT_DIR}/scripts/umhpc/env.sh"

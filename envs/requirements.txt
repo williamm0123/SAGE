@@ -21,3 +21,7 @@ einops==0.8.0
 # UniversalFakeDetect vendored CLIP imports pkg_resources (removed in newer setuptools)
 setuptools==69.5.1
 pytest==8.3.3
+# AEROBLADE autoencoders (loaded without transformers)
+diffusers==0.30.3
+huggingface-hub==0.25.2
+safetensors==0.4.5

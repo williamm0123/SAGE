@@ -31,11 +31,10 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sage.config import load_config  # noqa: E402
 from sage.data import Manifest  # noqa: E402
-from sage.experiment import (CONTROL_METHODS, PRIMARY_METHODS, eligible_ids, expected_runs, load_dir,  # noqa: E402
+from sage.experiment import (DETECTORS, CONTROL_METHODS, PRIMARY_METHODS, eligible_ids, expected_runs, load_dir,  # noqa: E402
                              screening_paths)
 from status import collect_status, format_rows  # noqa: E402
 
-DETECTORS = ("ufd", "dire")
 
 
 # ------------------------------------------------------------------------------------ loading
@@ -250,6 +249,7 @@ def main():
     ap.add_argument("--out", default="results/analysis")
     ap.add_argument("--config", default=None)
     ap.add_argument("--allow-incomplete", action="store_true", help="draft tables; incomplete rows are flagged")
+    ap.add_argument("--detectors", nargs="+", default=list(DETECTORS), choices=list(DETECTORS))
     args = ap.parse_args()
     cfg = load_config(args.config)
     m = Manifest(args.data)
@@ -257,7 +257,7 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    status = collect_status(args.results, m, cfg)
+    status = collect_status(args.results, m, cfg, detectors=args.detectors)
     locks, problems = check_locks(args.results)
     incomplete = [r for r in status if r["status"] != "complete"]
     if problems:
@@ -279,7 +279,7 @@ def main():
     md.append(format_rows(status))
     all_rows = []
 
-    for det in DETECTORS:
+    for det in args.detectors:
         csv_path, summ_path = screening_paths(args.results, det)
         if not csv_path.exists():
             md.append(f"\n## Detector: {det}\n\nnot screened\n")

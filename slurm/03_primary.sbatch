@@ -4,8 +4,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=128G
 #SBATCH --time=3-00:00:00
 #SBATCH --qos=long
 #SBATCH --output=logs/sage-primary_%A_%a.out
@@ -18,7 +18,7 @@
 source "${PROJECT_ROOT:-$SLURM_SUBMIT_DIR}/slurm/common.sh"
 
 NSHARD=${NSHARD:-2}
-DETS=(ufd dire); METHODS=(sage ba hsja qeba)
+DETS=(ufd aeroblade); METHODS=(sage ba hsja qeba)
 i=${SLURM_ARRAY_TASK_ID:-0}
 shard=$(( i % NSHARD )); i=$(( i / NSHARD ))
 method=${METHODS[$(( i % 4 ))]}; det=${DETS[$(( i / 4 ))]}

@@ -6,7 +6,7 @@ Spectral Alignment (ASA) and Spectral-Biased Query Refinement (SBQR), the label-
 (primary comparison, component controls, SD-v1 → SD-v2 transfer).
 
 SAGE is **training-free**: the GPU jobs are offline spectral profiling, clean screening and
-attack evaluation against frozen detectors (UniversalFakeDetect, DIRE).
+attack evaluation against frozen detectors (UniversalFakeDetect, AEROBLADE).
 
 ## Layout
 
@@ -23,7 +23,7 @@ sage/
   sbqr.py                   spectral-biased refinement with step adaptation            (Eq. 12-14)
   attack.py                 complete SAGE pipeline; controlled refinement variants
   baselines.py              BA (foolbox-3 defaults), HSJA (L2), QEBA-S (resize 4)
-  detectors.py              UFD and DIRE adapters (DIRE recomputed on every query)
+  detectors.py              UFD and AEROBLADE adapters (DIRE adapter kept, not used - see below)
   perceptual.py             LPIPS(alex, v0.1), PSNR, RMSE
   data.py, runinfo.py       manifest access, execution-lock metadata
 experiments/
@@ -46,8 +46,8 @@ cd /scr/user/eric123/project/SAGE && git pull     # PROJECT_ROOT is derived from
 bash scripts/umhpc/setup_env.sh          # login node: conda env, third-party code, public weights
 source scripts/umhpc/env.sh              # DIRE_ROOT defaults to /scr/user/eric123/datasets/DIRE
 python -m pytest -q tests
-mkdir -p logs && sbatch scripts/umhpc/check_env.sbatch   # GPU, weights, full DIRE/UFD query determinism
-bash slurm/submit_all.sh                 # prepare (manifest, priors, screening) -> pilot
+mkdir -p logs && sbatch scripts/umhpc/check_env.sbatch   # GPU, weights, UFD/AEROBLADE query determinism
+bash slurm/submit_all.sh                 # prepare (manifest, priors, AEROBLADE threshold, screening) -> pilot
 python experiments/status.py --data data/sage_v1 --results results   # pilot throughput + projected GPU-h
 bash slurm/submit_all.sh --full          # primary + controls/transfer; analysis starts when all runs exist
 ```
@@ -89,8 +89,26 @@ bash slurm/submit_all.sh --full          # primary + controls/transfer; analysis
   archive is frozen there, so the reported candidate is that first success. Images sent after it in
   the same batch are reported as `queries_after_success`.
 * The scheduler batches pending queries from many concurrent attacks into one detector call. This
-  does not change any per-attack query count; it only improves GPU throughput (important for DIRE,
-  where each query runs 20-step DDIM inversion + 20-step DDIM sampling). Every call is zero-padded to
+  does not change any per-attack query count; it only improves GPU throughput. Every call is zero-padded to
   a fixed batch shape (also in clean screening), so a label never depends on which attacks shared it.
 * Baselines start from the same reference pool, order and bisection as SAGE; their full parameter
   dictionaries are `sage/baselines.py:BASELINE_PARAMS`. QEBA is the spatial-resize variant QEBA-S.
+
+## Detectors (deviation from the manuscript: DIRE replaced by AEROBLADE)
+
+* **DIRE is not used.** The released `lsun_adm.pth` was trained on DIRE maps that the official
+  `compute_dire.py` saved under the input file name, so real LSUN maps are JPEG files and generated maps
+  PNG files. The classifier separates the two formats: JPEG-compressing the official PNG DIRE maps of
+  SD-v1 / SD-v2 / ADM images (q95) turns its fake rate from 100% into 0-3%, while every in-memory
+  (never-JPEG) map is called fake, including 99.5% of real test images. The adapter (`sage/detectors.py:DIRE`)
+  is kept for reference only.
+* **AEROBLADE** (Ricker et al., CVPR 2024, cited as [4]) replaces it: training-free, minimum over the SD1 VAE,
+  SD2 VAE (`stabilityai/sd-vae-ft-mse`, identical weights to the SD2-base VAE) and Kandinsky 2.1 MoVQ of the
+  LPIPS-VGG layer-2 distance between an image and its reconstruction (official repository @ 50fc2b2,
+  weights pinned by revision in the config). It has no decision threshold, so one is frozen on the
+  development split (`experiments/calibrate_threshold.py`, max balanced accuracy) before screening.
+  The forward pass runs without cuDNN and with classic attention so that each label depends on the image
+  alone (verified bit-identical across batch positions).
+* UFD and the 256x256 bicubic canvas follow the manuscript unchanged (official 0.5 threshold). On this
+  canvas UFD detects very few generated images (clean screening: 3 of 400 eligible); measured locally,
+  bicubic downsampling lowers UFD's AUC from 0.93 / 0.86 (native center crop) to 0.70 / 0.51 (SD-v1 / SD-v2).

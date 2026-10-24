@@ -4,8 +4,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=128G
 #SBATCH --time=3-00:00:00
 #SBATCH --qos=long
 #SBATCH --output=logs/sage-pilot_%j.out
@@ -15,7 +15,7 @@
 source "${PROJECT_ROOT:-$SLURM_SUBMIT_DIR}/slurm/common.sh"
 
 rc=0
-for det in ufd dire; do
+for det in ufd aeroblade; do
   for m in sage ba hsja qeba; do
     python experiments/run_attacks.py --experiment pilot --detector "$det" --method "$m" --seeds 0 \
       --data "$SAGE_DATA" --prior "$PRIOR_MIXED" --out "$RESULTS" --save-images 4 || rc=$?
